@@ -34,5 +34,6 @@ typedef struct {
 void motor_init(motor_dev_t *dev, TIM_HandleTypeDef *htim);
 void motor_set(motor_dev_t *dev, int16_t left, int16_t right);
 void motor_stop(motor_dev_t *dev);
+void motor_brake(motor_dev_t *dev);
 
 #endif /* MOTOR_H */

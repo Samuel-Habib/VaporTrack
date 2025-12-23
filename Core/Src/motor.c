@@ -68,3 +68,14 @@ void motor_stop(motor_dev_t *dev)
     HAL_GPIO_WritePin(IN4_GPIO_Port, IN4_Pin, GPIO_PIN_RESET);
 }
 
+void motor_brake(motor_dev_t *dev)
+{
+    /* brake: both direction pins high on each side, full PWM */
+    HAL_GPIO_WritePin(IN1_GPIO_Port, IN1_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(IN2_GPIO_Port, IN2_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(IN3_GPIO_Port, IN3_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(IN4_GPIO_Port, IN4_Pin, GPIO_PIN_SET);
+
+    __HAL_TIM_SET_COMPARE(dev->htim, TIM_CHANNEL_1, MOTOR_PWM_MAX);
+    __HAL_TIM_SET_COMPARE(dev->htim, TIM_CHANNEL_3, MOTOR_PWM_MAX);
+}
