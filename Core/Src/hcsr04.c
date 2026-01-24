@@ -89,3 +89,23 @@ float hcsr04_measure(hcsr04_dev_t *dev, hcsr04_id_t id)
     return dist;
 }
 
+void hcsr04_measure_all(hcsr04_dev_t *dev)
+{
+    /*
+     * measure sequentially with a short gap between each.
+     * the gap lets any residual echoes from sensor N die out
+     * before triggering sensor N+1.
+     */
+    hcsr04_measure(dev, HCSR04_FRONT);
+    uint32_t period = __HAL_TIM_GET_AUTORELOAD(dev->htim_us);
+    uint32_t t0 = us_now(dev);
+    while (us_elapsed(t0, us_now(dev), period) < 1000)
+        ;
+
+    hcsr04_measure(dev, HCSR04_LEFT);
+    t0 = us_now(dev);
+    while (us_elapsed(t0, us_now(dev), period) < 1000)
+        ;
+
+    hcsr04_measure(dev, HCSR04_RIGHT);
+}

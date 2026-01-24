@@ -44,5 +44,6 @@ typedef struct {
 
 void  hcsr04_init(hcsr04_dev_t *dev, TIM_HandleTypeDef *htim_us);
 float hcsr04_measure(hcsr04_dev_t *dev, hcsr04_id_t id);
+void  hcsr04_measure_all(hcsr04_dev_t *dev);
 
 #endif /* HCSR04_H */
