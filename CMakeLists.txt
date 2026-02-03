@@ -22,6 +22,7 @@ add_subdirectory(cmake/stm32cubemx)
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/motor.c
     Core/Src/hcsr04.c
+    Core/Src/bno055.c
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
