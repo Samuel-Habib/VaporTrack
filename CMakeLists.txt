@@ -24,6 +24,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/hcsr04.c
     Core/Src/bno055.c
     Core/Src/ssd1306.c
+    Core/Src/bme688.c
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
