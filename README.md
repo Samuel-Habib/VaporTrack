@@ -49,6 +49,12 @@ VaporTrack is an autonomous robotic rover powered by an **STM32F446RE (ARM Corte
 | **Power Regulation** | DFRobot DFR0831 Buck | DC-DC Step-Down | 7.4V input $\rightarrow$ 5.0V regulated (3A max) | Clean 5V logic & ultrasonic sensor supply |
 | **Battery Source** | 2x 18650 Li-ion Cells | Series Pack (2S) | 7.4V nominal (8.4V peak), 2600 mAh | Primary rover energy source |
 
+### Schematic
+![Schematic](docs/images/schematic.svg)
+
+### PCB Layout (Top)
+![PCB Layout](docs/images/pcb_top.svg)
+
 ---
 
 ## 3. Electrical & Power Architecture
