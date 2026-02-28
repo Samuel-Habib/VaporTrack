@@ -166,20 +166,28 @@ $$G_i = \frac{10^6}{R_{\text{gas}, i}}$$
 This inversion guarantees that $G_i$ increases proportionally with gas plume concentration, allowing standard gradient ascent to naturally steer toward the gas source without sign inversion.
 
 ### 2. Weighted Planar Least-Squares Regression
-In the localization phase, the rover models the local gas distribution in a neighborhood of radius $R$ as a first-order planar surface centered at $(x, y)$: $G(x_i, y_i) \approx a + b \cdot \Delta x_i + c \cdot \Delta y_i$, where $\Delta x_i = x_i - x$ and $\Delta y_i = y_i - y$.
+In the localization phase, the rover models the local gas distribution in a neighborhood of radius R as a first-order planar surface centered at (x, y).
 
-Setting up the normal equations: $\begin{bmatrix} \sum \Delta x_i^2 & \sum \Delta x_i \Delta y_i \\ \sum \Delta x_i \Delta y_i & \sum \Delta y_i^2 \end{bmatrix} \begin{bmatrix} b \\ c \end{bmatrix} = \begin{bmatrix} \sum \Delta x_i G_i \\ \sum \Delta y_i G_i \end{bmatrix}$
+Setting up the normal equations:
+```text
+[ Sum(dx^2)    Sum(dx*dy) ] [ b ] = [ Sum(dx*G) ]
+[ Sum(dx*dy)   Sum(dy^2)  ] [ c ] = [ Sum(dy*G) ]
+```
 
-Solving via Cramer's rule: $D = \left(\sum \Delta x_i^2\right)\left(\sum \Delta y_i^2\right) - \left(\sum \Delta x_i \Delta y_i\right)^2$
+Solving via Cramer's rule:
+```text
+D = Sum(dx^2)*Sum(dy^2) - Sum(dx*dy)^2
 
-$b = \frac{\left(\sum \Delta x_i G_i\right)\left(\sum \Delta y_i^2\right) - \left(\sum \Delta y_i G_i\right)\left(\sum \Delta x_i \Delta y_i\right)}{D}$
-
-$c = \frac{\left(\sum \Delta x_i^2\right)\left(\sum \Delta y_i G_i\right) - \left(\sum \Delta x_i \Delta y_i\right)\left(\sum \Delta x_i G_i\right)}{D}$
+b = (Sum(dx*G)*Sum(dy^2) - Sum(dy*G)*Sum(dx*dy)) / D
+c = (Sum(dx^2)*Sum(dy*G) - Sum(dx*dy)*Sum(dx*G)) / D
+```
 
 ### 3. Gradient Ascent Steering
-The estimated gradient vector $\nabla G$ gives the direction of steepest concentration change:
-$$\nabla G = \left[ \frac{\partial G}{\partial x}, \frac{\partial G}{\partial y} \right] = [b, c]$$
-$$\theta_{\text{target}} = \text{atan2}(c, b), \quad \|\nabla G\| = \sqrt{b^2 + c^2}$$
+The estimated gradient vector gives the direction of steepest concentration change:
+```text
+Grad(G) = [b, c]
+target_heading = atan2(c, b)
+```
 
 The rover computes heading error $e_\theta = \theta_{\text{target}} - \theta_{\text{current}}$ and applies differential steering proportional to $e_\theta$. When $\|\nabla G\|$ drops below the planar detection threshold and $G$ exceeds the plume peak threshold, the rover transitions to `NAV_STATE_SOURCE_FOUND`.
 
@@ -308,7 +316,7 @@ openocd -f openocd.cfg -c "program build/vapor_track.elf verify reset exit"
 
 1. **IMU Heading Calibration:** On power-up, the rover remains stationary for 3 seconds to let the gyroscope calibrate, then executes a slow rotational pivot. The OLED displays `CAL S:<sys> G:<gyro> M:<mag>`. Once `mag >= 2` and `gyro == 3`, calibration locks.
 2. **Ultrasonic Ranging Verification:** Each channel can be probed on PC1, PC3, and PC5 with a logic analyzer. A 10 µs pulse on trigger generates an echo high pulse between 116 µs (2 cm) and 23.2 ms (400 cm).
-3. **VOC Sensor Response Verification:** Exposing the BME688 to an isopropyl alcohol vapor source causes the MOX sensor resistance $R_{gas}$ to drop sharply from $\sim 150\text{ k}\Omega$ to $< 10\text{ k}\Omega$. The OLED reflects real-time $R_{gas}$ drops and computes gradient vector arrows on the display.
+3. **VOC Sensor Response Verification:** Exposing the BME688 to an isopropyl alcohol vapor source causes the MOX sensor resistance $R_{gas}$ to drop sharply from ~150 kΩ to < 10 kΩ. The OLED reflects real-time $R_{gas}$ drops and computes gradient vector arrows on the display.
 4. **Motor Differential Trim:** If the chassis drifts slightly under equal PWM duty cycles due to motor gearbox variance, adjust `NAV_SPEED_CRUISE` offsets in `Core/Inc/navigation.h`.
 
 ---
