@@ -1,0 +1,9 @@
+# KiCad caches and backups
+*-backups/
+*.bak
+*.bck
+*.kicad_prl
+fp-info-cache
+report.txt
+*.zip
+gerbers/
