@@ -48,6 +48,7 @@ typedef struct {
 void            map_init(gas_map_t *map);
 bool            map_add_sample(gas_map_t *map, const map_sample_t *s);
 map_sample_t   *map_nearest(gas_map_t *map, float x, float y);
+gas_gradient_t  map_estimate_gradient(gas_map_t *map, float x, float y, float radius);
 float           map_peak_gas(const gas_map_t *map, float *out_x, float *out_y);
 
 #endif /* MAPPING_H */

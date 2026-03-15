@@ -62,6 +62,73 @@ map_sample_t *map_nearest(gas_map_t *map, float x, float y)
     return &map->samples[best_idx];
 }
 
+gas_gradient_t map_estimate_gradient(gas_map_t *map, float x, float y, float radius)
+{
+    gas_gradient_t grad = {0};
+    grad.valid = false;
+
+    if (map->count < 3)
+        return grad;
+
+    float r2 = radius * radius;
+
+    /*
+     * accumulate sums for least-squares fit of:
+     *   gas = a + b*dx + c*dy
+     *
+     * normal equations (ignoring the constant term by centering):
+     *   [sum_dxdx  sum_dxdy] [b]   [sum_dxg]
+     *   [sum_dxdy  sum_dydy] [c] = [sum_dyg]
+     */
+    float sum_dxdx = 0, sum_dxdy = 0, sum_dydy = 0;
+    float sum_dxg = 0, sum_dyg = 0;
+    int n = 0;
+
+    for (uint16_t i = 0; i < map->count; i++) {
+        float dx = map->samples[i].x - x;
+        float dy = map->samples[i].y - y;
+        float d2 = dx * dx + dy * dy;
+
+        if (d2 > r2)
+            continue;
+
+        float g = map->samples[i].gas;
+
+        sum_dxdx += dx * dx;
+        sum_dxdy += dx * dy;
+        sum_dydy += dy * dy;
+        sum_dxg  += dx * g;
+        sum_dyg  += dy * g;
+        n++;
+    }
+
+    /* need at least 3 samples in the neighborhood */
+    if (n < 3)
+        return grad;
+
+    /* solve 2x2 system using Cramer's rule */
+    float det = sum_dxdx * sum_dydy - sum_dxdy * sum_dxdy;
+
+    /* degenerate -- samples are collinear or too clustered */
+    if (fabsf(det) < 1e-6f)
+        return grad;
+
+    float b = (sum_dxg * sum_dydy - sum_dyg * sum_dxdy) / det;
+    float c = (sum_dxdx * sum_dyg - sum_dxdy * sum_dxg) / det;
+
+    grad.dg_dx = b;
+    grad.dg_dy = c;
+    grad.magnitude = sqrtf(b * b + c * c);
+    grad.direction_deg = atan2f(c, b) * (180.0f / 3.14159265f);
+
+    /* normalize to 0..360 */
+    if (grad.direction_deg < 0)
+        grad.direction_deg += 360.0f;
+
+    grad.valid = (grad.magnitude > 0.01f);
+    return grad;
+}
+
 float map_peak_gas(const gas_map_t *map, float *out_x, float *out_y)
 {
     if (map->count == 0) {
