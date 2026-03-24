@@ -27,6 +27,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/bme688.c
     Core/Src/sensors.c
     Core/Src/mapping.c
+    Core/Src/navigation.c
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
