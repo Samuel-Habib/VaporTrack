@@ -2,7 +2,7 @@
 /**
   ******************************************************************************
   * @file           : main.c
-  * @brief          : Main program body
+  * @brief          : Main program body for VaporTrack Autonomous Rover
   ******************************************************************************
   * @attention
   *
@@ -22,22 +22,32 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "cmsis_os2.h"
+#include "bme688.h"
+#include "bno055.h"
+#include "hcsr04.h"
+#include "ssd1306.h"
+#include "motor.h"
+#include "sensors.h"
+#include "mapping.h"
+#include "navigation.h"
 
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+#include <stdlib.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -45,37 +55,67 @@ I2C_HandleTypeDef hi2c1;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim4;
 
-/* Definitions for Task1 */
-osThreadId_t Task1Handle;
-const osThreadAttr_t Task1_attributes = {
-  .name = "Task1",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
-};
-/* Definitions for Task2 */
-osThreadId_t Task2Handle;
-const osThreadAttr_t Task2_attributes = {
-  .name = "Task2",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityBelowNormal,
-};
-/* Definitions for Task3 */
-osThreadId_t Task3Handle;
-const osThreadAttr_t Task3_attributes = {
-  .name = "Task3",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
-/* Definitions for Task4 */
-osThreadId_t Task4Handle;
-const osThreadAttr_t Task4_attributes = {
-  .name = "Task4",
-  .stack_size = 128 * 4,
+/* Definitions for SensorTask */
+osThreadId_t SensorTaskHandle;
+const osThreadAttr_t SensorTask_attributes = {
+  .name = "SensorTask",
+  .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityAboveNormal,
 };
+/* Definitions for UltrasonicTask */
+osThreadId_t UltrasonicTaskHandle;
+const osThreadAttr_t UltrasonicTask_attributes = {
+  .name = "USSTask",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for NavTask */
+osThreadId_t NavTaskHandle;
+const osThreadAttr_t NavTask_attributes = {
+  .name = "NavTask",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityAboveNormal,
+};
+/* Definitions for MotorTask */
+osThreadId_t MotorTaskHandle;
+const osThreadAttr_t MotorTask_attributes = {
+  .name = "MotorTask",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityHigh,
+};
+/* Definitions for MappingTask */
+osThreadId_t MappingTaskHandle;
+const osThreadAttr_t MappingTask_attributes = {
+  .name = "MapTask",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for DisplayTask */
+osThreadId_t DisplayTaskHandle;
+const osThreadAttr_t DisplayTask_attributes = {
+  .name = "DispTask",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityBelowNormal,
+};
 /* USER CODE BEGIN PV */
+static bme688_dev_t   g_bme;
+static bno055_dev_t   g_bno;
+static hcsr04_dev_t   g_uss;
+static ssd1306_dev_t  g_oled;
+static motor_dev_t    g_motor;
 
+static gas_map_t      g_map;
+static nav_ctx_t      g_nav;
+
+static volatile motor_cmd_t g_motor_cmd;
+static SemaphoreHandle_t    g_motor_mutex;
+static SemaphoreHandle_t    g_i2c_mutex;
+
+static volatile bool g_bme_ok   = false;
+static volatile bool g_bno_ok   = false;
+static volatile bool g_oled_ok  = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -84,18 +124,30 @@ static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
-void StartDefaultTask(void *argument);
-void StartTask02(void *argument);
-void StartTask03(void *argument);
-void StartTask04(void *argument);
+static void MX_TIM4_Init(void);
+void SensorTask_Entry(void *argument);
+void UltrasonicTask_Entry(void *argument);
+void NavigationTask_Entry(void *argument);
+void MotorTask_Entry(void *argument);
+void MappingTask_Entry(void *argument);
+void DisplayTask_Entry(void *argument);
 
 /* USER CODE BEGIN PFP */
+static inline void i2c_lock(void)
+{
+  if (g_i2c_mutex != NULL)
+    xSemaphoreTake(g_i2c_mutex, portMAX_DELAY);
+}
 
+static inline void i2c_unlock(void)
+{
+  if (g_i2c_mutex != NULL)
+    xSemaphoreGive(g_i2c_mutex);
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
 /* USER CODE END 0 */
 
 /**
@@ -104,9 +156,7 @@ void StartTask04(void *argument);
   */
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
-
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -115,14 +165,12 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
   /* USER CODE END Init */
 
   /* Configure the system clock */
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -130,7 +178,22 @@ int main(void)
   MX_I2C1_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
+
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+
+  sensors_init();
+  map_init(&g_map);
+  nav_init(&g_nav, &g_map);
+  motor_init(&g_motor, &htim1);
+
+  g_motor_mutex = xSemaphoreCreateMutex();
+  g_i2c_mutex   = xSemaphoreCreateMutex();
+  configASSERT(g_motor_mutex != NULL);
+  configASSERT(g_i2c_mutex != NULL);
 
   /* USER CODE END 2 */
 
@@ -138,47 +201,35 @@ int main(void)
   osKernelInitialize();
 
   /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of Task1 */
-  Task1Handle = osThreadNew(StartDefaultTask, NULL, &Task1_attributes);
-
-  /* creation of Task2 */
-  Task2Handle = osThreadNew(StartTask02, NULL, &Task2_attributes);
-
-  /* creation of Task3 */
-  Task3Handle = osThreadNew(StartTask03, NULL, &Task3_attributes);
-
-  /* creation of Task4 */
-  Task4Handle = osThreadNew(StartTask04, NULL, &Task4_attributes);
+  SensorTaskHandle = osThreadNew(SensorTask_Entry, NULL, &SensorTask_attributes);
+  UltrasonicTaskHandle = osThreadNew(UltrasonicTask_Entry, NULL, &UltrasonicTask_attributes);
+  NavTaskHandle = osThreadNew(NavigationTask_Entry, NULL, &NavTask_attributes);
+  MotorTaskHandle = osThreadNew(MotorTask_Entry, NULL, &MotorTask_attributes);
+  MappingTaskHandle = osThreadNew(MappingTask_Entry, NULL, &MappingTask_attributes);
+  DisplayTaskHandle = osThreadNew(DisplayTask_Entry, NULL, &DisplayTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
-  /* add events, ... */
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
   osKernelStart();
 
   /* We should never get here as control is now taken by the scheduler */
-
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
@@ -251,13 +302,10 @@ void SystemClock_Config(void)
   */
 static void MX_I2C1_Init(void)
 {
-
   /* USER CODE BEGIN I2C1_Init 0 */
-
   /* USER CODE END I2C1_Init 0 */
 
   /* USER CODE BEGIN I2C1_Init 1 */
-
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
   hi2c1.Init.ClockSpeed = 100000;
@@ -273,9 +321,7 @@ static void MX_I2C1_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN I2C1_Init 2 */
-
   /* USER CODE END I2C1_Init 2 */
-
 }
 
 /**
@@ -285,9 +331,7 @@ static void MX_I2C1_Init(void)
   */
 static void MX_TIM1_Init(void)
 {
-
   /* USER CODE BEGIN TIM1_Init 0 */
-
   /* USER CODE END TIM1_Init 0 */
 
   TIM_MasterConfigTypeDef sMasterConfig = {0};
@@ -295,15 +339,14 @@ static void MX_TIM1_Init(void)
   TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
 
   /* USER CODE BEGIN TIM1_Init 1 */
-
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 0;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 65535;
+  htim1.Init.Period = 8999;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
-  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
   {
     Error_Handler();
@@ -341,10 +384,8 @@ static void MX_TIM1_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN TIM1_Init 2 */
-
   /* USER CODE END TIM1_Init 2 */
   HAL_TIM_MspPostInit(&htim1);
-
 }
 
 /**
@@ -354,21 +395,18 @@ static void MX_TIM1_Init(void)
   */
 static void MX_TIM2_Init(void)
 {
-
   /* USER CODE BEGIN TIM2_Init 0 */
-
   /* USER CODE END TIM2_Init 0 */
 
   TIM_MasterConfigTypeDef sMasterConfig = {0};
   TIM_OC_InitTypeDef sConfigOC = {0};
 
   /* USER CODE BEGIN TIM2_Init 1 */
-
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 4294967295;
+  htim2.Init.Period = 65535;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
@@ -390,10 +428,34 @@ static void MX_TIM2_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN TIM2_Init 2 */
-
   /* USER CODE END TIM2_Init 2 */
   HAL_TIM_MspPostInit(&htim2);
+}
 
+/**
+  * @brief TIM4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM4_Init(void)
+{
+  /* USER CODE BEGIN TIM4_Init 0 */
+  /* USER CODE END TIM4_Init 0 */
+
+  /* USER CODE BEGIN TIM4_Init 1 */
+  /* USER CODE END TIM4_Init 1 */
+  htim4.Instance = TIM4;
+  htim4.Init.Prescaler = 89;
+  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim4.Init.Period = 65535;
+  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM4_Init 2 */
+  /* USER CODE END TIM4_Init 2 */
 }
 
 /**
@@ -405,15 +467,31 @@ static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
   /* USER CODE BEGIN MX_GPIO_Init_1 */
-
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, USS_FRONT_TRIG_Pin|USS_LEFT_TRIG_Pin|USS_RIGHT_TRIG_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, IN1_Pin|IN4_Pin|IN2_Pin|IN3_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : USS_FRONT_TRIG_Pin USS_LEFT_TRIG_Pin USS_RIGHT_TRIG_Pin */
+  GPIO_InitStruct.Pin = USS_FRONT_TRIG_Pin|USS_LEFT_TRIG_Pin|USS_RIGHT_TRIG_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : USS_FRONT_ECHO_Pin USS_LEFT_ECHO_Pin USS_RIGHT_ECHO_Pin */
+  GPIO_InitStruct.Pin = USS_FRONT_ECHO_Pin|USS_LEFT_ECHO_Pin|USS_RIGHT_ECHO_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : IN1_Pin IN4_Pin IN2_Pin IN3_Pin */
   GPIO_InitStruct.Pin = IN1_Pin|IN4_Pin|IN2_Pin|IN3_Pin;
@@ -423,7 +501,6 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
-
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
@@ -431,76 +508,331 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartDefaultTask */
+/* USER CODE BEGIN Header_SensorTask_Entry */
 /**
-  * @brief  Function implementing the Task1 thread.
+  * @brief  Function implementing the SensorTask thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
+/* USER CODE END Header_SensorTask_Entry */
+void SensorTask_Entry(void *argument)
 {
   /* USER CODE BEGIN 5 */
-  /* Infinite loop */
-  for(;;)
+  (void)argument;
+
+  i2c_lock();
+  if (bme688_init(&g_bme, &hi2c1) == BME688_OK)
+    g_bme_ok = true;
+
+  if (bno055_init(&g_bno, &hi2c1) == BNO055_OK)
+    g_bno_ok = true;
+  i2c_unlock();
+
+  for (;;)
   {
-    osDelay(1);
+    uint32_t now = HAL_GetTick();
+
+    if (g_bme_ok)
+    {
+      bme688_data_t env;
+      i2c_lock();
+      bme688_status_t trig_res = bme688_trigger_forced(&g_bme);
+      i2c_unlock();
+
+      if (trig_res == BME688_OK)
+      {
+        /* Yield to RTOS while sensor heater stabilizes (150ms dwell).
+         * I2C bus is released so DisplayTask can flush without contention. */
+        osDelay(160);
+
+        i2c_lock();
+        bme688_status_t read_res = bme688_read_data(&g_bme, &env);
+        i2c_unlock();
+
+        if (read_res == BME688_OK)
+        {
+          sensors_lock();
+          g_sensors.gas_resistance   = env.gas_resistance;
+          g_sensors.temperature      = env.temperature;
+          g_sensors.humidity         = env.humidity;
+          g_sensors.pressure         = env.pressure;
+          g_sensors.gas_valid        = env.gas_valid;
+          g_sensors.gas_heater_stable = env.heat_stab;
+          g_sensors.gas_timestamp_ms  = now;
+          sensors_unlock();
+        }
+      }
+    }
+
+    if (g_bno_ok)
+    {
+      bno055_euler_t euler;
+      bno055_cal_status_t cal;
+      i2c_lock();
+      bno055_status_t euler_res = bno055_read_euler(&g_bno, &euler);
+      if (euler_res == BNO055_OK)
+      {
+        bno055_get_calibration(&g_bno, &cal);
+      }
+      i2c_unlock();
+
+      if (euler_res == BNO055_OK)
+      {
+        sensors_lock();
+        g_sensors.heading_deg    = euler.heading;
+        g_sensors.roll_deg       = euler.roll;
+        g_sensors.pitch_deg      = euler.pitch;
+        g_sensors.cal_sys        = cal.sys;
+        g_sensors.cal_gyro       = cal.gyro;
+        g_sensors.cal_accel      = cal.accel;
+        g_sensors.cal_mag        = cal.mag;
+        g_sensors.imu_calibrated = bno055_is_calibrated(&cal);
+        g_sensors.imu_timestamp_ms = now;
+        sensors_unlock();
+      }
+    }
+
+    osDelay(100);
   }
   /* USER CODE END 5 */
 }
 
-/* USER CODE BEGIN Header_StartTask02 */
+/* USER CODE BEGIN Header_UltrasonicTask_Entry */
 /**
-* @brief Function implementing the Task2 thread.
+* @brief Function implementing the UltrasonicTask thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartTask02 */
-void StartTask02(void *argument)
+/* USER CODE END Header_UltrasonicTask_Entry */
+void UltrasonicTask_Entry(void *argument)
 {
-  /* USER CODE BEGIN StartTask02 */
-  /* Infinite loop */
-  for(;;)
+  /* USER CODE BEGIN UltrasonicTask_Entry */
+  (void)argument;
+
+  hcsr04_init(&g_uss, &htim4);
+
+  g_uss.hw[HCSR04_FRONT].trig_port = USS_FRONT_TRIG_Port;
+  g_uss.hw[HCSR04_FRONT].trig_pin  = USS_FRONT_TRIG_Pin;
+  g_uss.hw[HCSR04_FRONT].echo_port = USS_FRONT_ECHO_Port;
+  g_uss.hw[HCSR04_FRONT].echo_pin  = USS_FRONT_ECHO_Pin;
+
+  g_uss.hw[HCSR04_LEFT].trig_port  = USS_LEFT_TRIG_Port;
+  g_uss.hw[HCSR04_LEFT].trig_pin   = USS_LEFT_TRIG_Pin;
+  g_uss.hw[HCSR04_LEFT].echo_port  = USS_LEFT_ECHO_Port;
+  g_uss.hw[HCSR04_LEFT].echo_pin   = USS_LEFT_ECHO_Pin;
+
+  g_uss.hw[HCSR04_RIGHT].trig_port = USS_RIGHT_TRIG_Port;
+  g_uss.hw[HCSR04_RIGHT].trig_pin  = USS_RIGHT_TRIG_Pin;
+  g_uss.hw[HCSR04_RIGHT].echo_port = USS_RIGHT_ECHO_Port;
+  g_uss.hw[HCSR04_RIGHT].echo_pin  = USS_RIGHT_ECHO_Pin;
+
+  for (;;)
   {
-    osDelay(1);
+    hcsr04_measure_all(&g_uss);
+
+    sensors_lock();
+    g_sensors.dist_front_cm = g_uss.distance_cm[HCSR04_FRONT];
+    g_sensors.dist_left_cm  = g_uss.distance_cm[HCSR04_LEFT];
+    g_sensors.dist_right_cm = g_uss.distance_cm[HCSR04_RIGHT];
+    g_sensors.uss_timestamp_ms = HAL_GetTick();
+    sensors_unlock();
+
+    osDelay(100);
   }
-  /* USER CODE END StartTask02 */
+  /* USER CODE END UltrasonicTask_Entry */
 }
 
-/* USER CODE BEGIN Header_StartTask03 */
+/* USER CODE BEGIN Header_NavigationTask_Entry */
 /**
-* @brief Function implementing the Task3 thread.
+* @brief Function implementing the NavTask thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartTask03 */
-void StartTask03(void *argument)
+/* USER CODE END Header_NavigationTask_Entry */
+void NavigationTask_Entry(void *argument)
 {
-  /* USER CODE BEGIN StartTask03 */
-  /* Infinite loop */
-  for(;;)
+  /* USER CODE BEGIN NavigationTask_Entry */
+  (void)argument;
+
+  osDelay(500);
+
+  for (;;)
   {
-    osDelay(1);
+    sensor_data_t snap;
+    sensors_copy(&snap);
+
+    nav_sensor_input_t input;
+    /* Convert MOX gas resistance (ohms) to relative conductance (uS):
+     * As VOC concentration increases, MOX resistance drops, so conductance
+     * (1/R) increases proportionally with gas plume intensity. */
+    if (snap.gas_resistance > 100.0f) {
+      input.gas = 1000000.0f / snap.gas_resistance;
+    } else {
+      input.gas = 0.0f;
+    }
+    input.temperature   = snap.temperature;
+    input.humidity      = snap.humidity;
+    input.pressure      = snap.pressure;
+    input.gas_valid     = snap.gas_valid;
+    input.heading_deg   = snap.heading_deg;
+    input.heading_valid = snap.imu_calibrated;
+    input.dist_front_cm = snap.dist_front_cm;
+    input.dist_left_cm  = snap.dist_left_cm;
+    input.dist_right_cm = snap.dist_right_cm;
+    input.pos_x         = g_nav.pos_x;
+    input.pos_y         = g_nav.pos_y;
+
+    uint32_t now = HAL_GetTick();
+    motor_cmd_t cmd = nav_update(&g_nav, &input, now);
+
+    xSemaphoreTake(g_motor_mutex, portMAX_DELAY);
+    g_motor_cmd = cmd;
+    xSemaphoreGive(g_motor_mutex);
+
+    sensors_lock();
+    g_sensors.pos_x = g_nav.pos_x;
+    g_sensors.pos_y = g_nav.pos_y;
+    sensors_unlock();
+
+    osDelay(150);
   }
-  /* USER CODE END StartTask03 */
+  /* USER CODE END NavigationTask_Entry */
 }
 
-/* USER CODE BEGIN Header_StartTask04 */
+/* USER CODE BEGIN Header_MotorTask_Entry */
 /**
-* @brief Function implementing the Task4 thread.
+* @brief Function implementing the MotorTask thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartTask04 */
-void StartTask04(void *argument)
+/* USER CODE END Header_MotorTask_Entry */
+void MotorTask_Entry(void *argument)
 {
-  /* USER CODE BEGIN StartTask04 */
-  /* Infinite loop */
-  for(;;)
+  /* USER CODE BEGIN MotorTask_Entry */
+  (void)argument;
+
+  for (;;)
   {
-    osDelay(1);
+    motor_cmd_t cmd;
+    xSemaphoreTake(g_motor_mutex, portMAX_DELAY);
+    cmd = g_motor_cmd;
+    xSemaphoreGive(g_motor_mutex);
+
+    motor_set(&g_motor, cmd.left, cmd.right);
+
+    uint16_t activity = (uint16_t)(abs(cmd.left) + abs(cmd.right)) / 2;
+    if (activity < 500) activity = 500;
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, activity);
+
+    osDelay(50);
   }
-  /* USER CODE END StartTask04 */
+  /* USER CODE END MotorTask_Entry */
+}
+
+/* USER CODE BEGIN Header_MappingTask_Entry */
+/**
+* @brief Function implementing the MappingTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_MappingTask_Entry */
+void MappingTask_Entry(void *argument)
+{
+  /* USER CODE BEGIN MappingTask_Entry */
+  (void)argument;
+
+  for (;;)
+  {
+    sensor_data_t snap;
+    sensors_copy(&snap);
+
+    if (g_map.count > 3)
+    {
+      g_map.gradient = map_estimate_gradient(&g_map, snap.pos_x, snap.pos_y, 1.5f);
+    }
+
+    osDelay(500);
+  }
+  /* USER CODE END MappingTask_Entry */
+}
+
+/* USER CODE BEGIN Header_DisplayTask_Entry */
+/**
+* @brief Function implementing the DisplayTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_DisplayTask_Entry */
+void DisplayTask_Entry(void *argument)
+{
+  /* USER CODE BEGIN DisplayTask_Entry */
+  (void)argument;
+
+  i2c_lock();
+  if (ssd1306_init(&g_oled, &hi2c1) == SSD1306_OK)
+    g_oled_ok = true;
+  i2c_unlock();
+
+  char line[22];
+
+  for (;;)
+  {
+    if (!g_oled_ok)
+    {
+      osDelay(2000);
+      continue;
+    }
+
+    sensor_data_t snap;
+    sensors_copy(&snap);
+
+    ssd1306_clear(&g_oled);
+
+    snprintf(line, sizeof(line), "%-10s %3d%%",
+             nav_state_name(g_nav.state),
+             (int)(snap.cal_sys * 33));
+    ssd1306_puts(&g_oled, 0, 0, line);
+
+    snprintf(line, sizeof(line), "GAS:%-6d %4.1fC",
+             (int)snap.gas_resistance, (double)snap.temperature);
+    ssd1306_puts(&g_oled, 0, 8, line);
+
+    snprintf(line, sizeof(line), "H:%4.1f%% P:%5.0f",
+             (double)snap.humidity, (double)(snap.pressure / 100.0f));
+    ssd1306_puts(&g_oled, 0, 16, line);
+
+    snprintf(line, sizeof(line), "F:%3d L:%3d R:%3d",
+             (int)snap.dist_front_cm,
+             (int)snap.dist_left_cm,
+             (int)snap.dist_right_cm);
+    ssd1306_puts(&g_oled, 0, 24, line);
+
+    snprintf(line, sizeof(line), "X:%5.2f Y:%5.2f",
+             (double)snap.pos_x, (double)snap.pos_y);
+    ssd1306_puts(&g_oled, 0, 32, line);
+
+    snprintf(line, sizeof(line), "HDG:%3d", (int)snap.heading_deg);
+    ssd1306_puts(&g_oled, 0, 40, line);
+
+    if (g_map.gradient.valid)
+    {
+      snprintf(line, sizeof(line), "dG:%+.0f @%3d",
+               (double)g_map.gradient.magnitude,
+               (int)g_map.gradient.direction_deg);
+      ssd1306_puts(&g_oled, 0, 48, line);
+    }
+
+    snprintf(line, sizeof(line), "MAP:%d/%d",
+             g_map.count, MAP_MAX_SAMPLES);
+    ssd1306_puts(&g_oled, 0, 56, line);
+
+    i2c_lock();
+    ssd1306_flush(&g_oled);
+    i2c_unlock();
+
+    osDelay(500);
+  }
+  /* USER CODE END DisplayTask_Entry */
 }
 
 /**
@@ -514,14 +846,11 @@ void StartTask04(void *argument)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   /* USER CODE BEGIN Callback 0 */
-
   /* USER CODE END Callback 0 */
-  if (htim->Instance == TIM6)
-  {
+  if (htim->Instance == TIM6) {
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-
   /* USER CODE END Callback 1 */
 }
 
@@ -539,7 +868,8 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
-#ifdef USE_FULL_ASSERT
+
+#ifdef  USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.
@@ -550,8 +880,10 @@ void Error_Handler(void)
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* User can add his own implementation to report the file name and line
+     number, ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  (void)file;
+  (void)line;
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */

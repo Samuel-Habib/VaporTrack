@@ -29,48 +29,48 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
 
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
-
-/* USER CODE END Includes */
-
-/* Exported types ------------------------------------------------------------*/
-/* USER CODE BEGIN ET */
-
-/* USER CODE END ET */
-
-/* Exported constants --------------------------------------------------------*/
-/* USER CODE BEGIN EC */
-
-/* USER CODE END EC */
-
-/* Exported macro ------------------------------------------------------------*/
-/* USER CODE BEGIN EM */
-
-/* USER CODE END EM */
-
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 
-/* USER CODE BEGIN EFP */
+/* --- Pin Definitions --- */
 
-/* USER CODE END EFP */
+/* onboard LED */
+#define LED_Pin             GPIO_PIN_5
+#define LED_GPIO_Port       GPIOA
 
-/* Private defines -----------------------------------------------------------*/
-#define IN1_Pin GPIO_PIN_10
-#define IN1_GPIO_Port GPIOB
-#define IN4_Pin GPIO_PIN_3
-#define IN4_GPIO_Port GPIOB
-#define IN2_Pin GPIO_PIN_4
-#define IN2_GPIO_Port GPIOB
-#define IN3_Pin GPIO_PIN_5
-#define IN3_GPIO_Port GPIOB
+/* L298N motor direction */
+#define IN1_Pin             GPIO_PIN_10
+#define IN1_GPIO_Port       GPIOB
+#define IN2_Pin             GPIO_PIN_4
+#define IN2_GPIO_Port       GPIOB
+#define IN3_Pin             GPIO_PIN_5
+#define IN3_GPIO_Port       GPIOB
+#define IN4_Pin             GPIO_PIN_3
+#define IN4_GPIO_Port       GPIOB
 
-/* USER CODE BEGIN Private defines */
+/* L298N motor PWM (active on TIM1) */
+#define ENA_Pin             GPIO_PIN_8
+#define ENA_GPIO_Port       GPIOA
+#define ENB_Pin             GPIO_PIN_10
+#define ENB_GPIO_Port       GPIOA
 
-/* USER CODE END Private defines */
+/* HC-SR04 ultrasonic sensors */
+#define USS_FRONT_TRIG_Pin  GPIO_PIN_0
+#define USS_FRONT_TRIG_Port GPIOC
+#define USS_FRONT_ECHO_Pin  GPIO_PIN_1
+#define USS_FRONT_ECHO_Port GPIOC
+
+#define USS_LEFT_TRIG_Pin   GPIO_PIN_2
+#define USS_LEFT_TRIG_Port  GPIOC
+#define USS_LEFT_ECHO_Pin   GPIO_PIN_3
+#define USS_LEFT_ECHO_Port  GPIOC
+
+#define USS_RIGHT_TRIG_Pin  GPIO_PIN_4
+#define USS_RIGHT_TRIG_Port GPIOC
+#define USS_RIGHT_ECHO_Pin  GPIO_PIN_5
+#define USS_RIGHT_ECHO_Port GPIOC
 
 #ifdef __cplusplus
 }
