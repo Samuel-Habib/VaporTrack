@@ -1,0 +1,3 @@
+
+init: cmake --preset Debug
+cmake --build build --preset Debug --target flash

@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/work/dev/vapor_track/build/Debug/cmake_install.cmake",
+		"/Users/work/dev/vapor_track/build/Debug/cmake/stm32cubemx/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
