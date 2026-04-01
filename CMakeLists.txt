@@ -72,8 +72,9 @@ add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
 
 # Custom target: Flash firmware to the MCU
 # Execute via: cmake --build build --target flash
+# Custom target: Flash firmware to the MCU
 add_custom_target(flash
-    COMMAND st-flash --reset write ${CMAKE_PROJECT_NAME}.bin 0x08000000
+    COMMAND st-flash --connect-under-reset --reset write ${CMAKE_PROJECT_NAME}.bin 0x08000000
     DEPENDS ${CMAKE_PROJECT_NAME}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Flashing firmware to target hardware..."
