@@ -1,3 +1,8 @@
 
+dependencies: arm-none-eabi-gcc, ninja, cmake, stlink
+,
 init: cmake --preset Debug
 cmake --build build --preset Debug --target flash
+st-flash --reset write build/debug/vapor_track.bin 0x08000000
+
+nvim optional: ln -s build/compile_commands.json .

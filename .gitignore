@@ -1,0 +1,26 @@
+# Build and Binaries
+build/
+*.elf
+*.bin
+*.hex
+*.map
+*.o
+*.d
+
+# CMake and Tools
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CMakeUserPresets.json
+compile_commands.json
+.ninja_deps
+.ninja_log
+
+# IDE Specific
+.settings/
+.project
+.cproject
+.mxproject
+.vscode/
+.idea/
+*.launch
