@@ -160,16 +160,15 @@ $$G_i = \frac{10^6}{R_{\text{gas}, i}}$$
 This inversion guarantees that $G_i$ increases proportionally with gas plume concentration, allowing standard gradient ascent to naturally steer toward the gas source without sign inversion.
 
 ### 2. Weighted Planar Least-Squares Regression
-In the localization phase, the rover models the local gas distribution in a neighborhood of radius $R$ as a first-order planar surface centered at $(x, y)$:
-$$G(x_i, y_i) \approx a + b \cdot \Delta x_i + c \cdot \Delta y_i, \quad \text{where } \Delta x_i = x_i - x, \; \Delta y_i = y_i - y$$
+In the localization phase, the rover models the local gas distribution in a neighborhood of radius $R$ as a first-order planar surface centered at $(x, y)$: $G(x_i, y_i) \approx a + b \cdot \Delta x_i + c \cdot \Delta y_i$, where $\Delta x_i = x_i - x$ and $\Delta y_i = y_i - y$.
 
-Setting up the normal equations:
-$$\begin{bmatrix} \sum \Delta x_i^2 & \sum \Delta x_i \Delta y_i \\ \sum \Delta x_i \Delta y_i & \sum \Delta y_i^2 \end{bmatrix} \begin{bmatrix} b \\ c \end{bmatrix} = \begin{bmatrix} \sum \Delta x_i G_i \\ \sum \Delta y_i G_i \end{bmatrix}$$
+Setting up the normal equations: $\begin{bmatrix} \sum \Delta x_i^2 & \sum \Delta x_i \Delta y_i \\ \sum \Delta x_i \Delta y_i & \sum \Delta y_i^2 \end{bmatrix} \begin{bmatrix} b \\ c \end{bmatrix} = \begin{bmatrix} \sum \Delta x_i G_i \\ \sum \Delta y_i G_i \end{bmatrix}$
 
-Solving via Cramer's rule:
-$$D = \left(\sum \Delta x_i^2\right)\left(\sum \Delta y_i^2\right) - \left(\sum \Delta x_i \Delta y_i\right)^2$$
-$$b = \frac{\left(\sum \Delta x_i G_i\right)\left(\sum \Delta y_i^2\right) - \left(\sum \Delta y_i G_i\right)\left(\sum \Delta x_i \Delta y_i\right)}{D}$$
-$$c = \frac{\left(\sum \Delta x_i^2\right)\left(\sum \Delta y_i G_i\right) - \left(\sum \Delta x_i \Delta y_i\right)\left(\sum \Delta x_i G_i\right)}{D}$$
+Solving via Cramer's rule: $D = \left(\sum \Delta x_i^2\right)\left(\sum \Delta y_i^2\right) - \left(\sum \Delta x_i \Delta y_i\right)^2$
+
+$b = \frac{\left(\sum \Delta x_i G_i\right)\left(\sum \Delta y_i^2\right) - \left(\sum \Delta y_i G_i\right)\left(\sum \Delta x_i \Delta y_i\right)}{D}$
+
+$c = \frac{\left(\sum \Delta x_i^2\right)\left(\sum \Delta y_i G_i\right) - \left(\sum \Delta x_i \Delta y_i\right)\left(\sum \Delta x_i G_i\right)}{D}$
 
 ### 3. Gradient Ascent Steering
 The estimated gradient vector $\nabla G$ gives the direction of steepest concentration change:
